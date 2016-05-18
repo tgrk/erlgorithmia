@@ -1,0 +1,20 @@
+{application,
+ erlgorithmia,
+ [{description,  "Algorithmia API Erlang client"},
+  {vsn,          "0.1.0"},
+  {modules,      []},
+  {registered,   []},
+  {applications, [ kernel
+                 , stdlib
+                 , crypto
+                 , public_key
+                 , hackney
+                 ]},
+  {env,          []},
+  {mod,          {eac_app, []}},
+  {maintainers,  ["Martin Wiso"]},
+  {licenses,     ["MIT"]},
+  {links,        [{"Github", "https://github.com/tgrk/erlgorithmia"}]},
+  {build_tools,  ["rebar3"]}
+ ]
+}.
