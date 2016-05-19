@@ -13,6 +13,9 @@
         , stop/0
 
         , set_api_key/1
+        , set_http_options/1
+        , get_http_options/0
+
         , algo/2
         , algo/3
         , algo/4
@@ -32,6 +35,14 @@
 -spec set_api_key(binary()) -> ok | no_return().
 set_api_key(ApiKey) ->
     eac_server:set_api_key(ApiKey).
+
+-spec set_http_options(list()) -> ok | no_return().
+set_http_options(Options) ->
+    eac_server:set_http_options(Options).
+
+-spec get_http_options() -> list() | no_return().
+get_http_options() ->
+    eac_server:get_http_options().
 
 -spec algo(binary(), binary()) -> response().
 algo(AlgoName, Input)  ->

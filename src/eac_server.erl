@@ -17,6 +17,7 @@
         , call_api/1
         , set_api_key/1
         , set_http_options/1
+        , get_http_options/0
         ]).
 
 %% gen_server callbacks
@@ -37,11 +38,13 @@
         ]).
 -endif.
 
--define(SERV_NAME, ?MODULE).
--define(API_URL,   <<"https://api.algorithmia.com/v1/algo">>).
+-define(SERV_NAME,            ?MODULE).
+-define(API_URL,              <<"https://api.algorithmia.com/v1/algo">>).
+-define(DEFAULT_HTTP_OPTIONS, [{pool, default}]).
 
--record(state, {api_key   :: binary(),
-                http_opts :: list()}).
+-record(state, {api_key   = <<>>                  :: binary(),
+                http_opts = ?DEFAULT_HTTP_OPTIONS :: list()
+               }).
 
 %%%============================================================================
 %%% API
@@ -53,6 +56,10 @@ set_api_key(ApiKey) ->
 -spec set_http_options(list()) -> ok | no_return().
 set_http_options(Options) ->
     gen_server:call(?SERV_NAME, {set_http_options, Options}).
+
+-spec get_http_options() -> list() | no_return().
+get_http_options() ->
+    gen_server:call(?SERV_NAME, get_http_options).
 
 -spec call_api(map()) -> eac:response().
 call_api(Args) ->
@@ -69,20 +76,33 @@ start_link(ApiKey) ->
 %%%============================================================================
 %%% gen_server callbacks
 %%%============================================================================
+%% @private
+-spec init([] | list(binary())) -> {ok, #state{}}.
 init([]) ->
-    {ok, #state{api_key = undefined, http_opts = [{pool, default}]}};
+    {ok, #state{}};
 init([ApiKey]) ->
-    {ok, #state{api_key = ApiKey, http_opts = [{pool, default}]}}.
+    {ok, #state{api_key = ApiKey}}.
 
+%% @private
+-spec terminate(normal, #state{}) -> ok.
 terminate(normal, _State) ->
     ok.
 
+%% @private
+-spec handle_call(term(), {pid(), term()}, #state{}) ->
+                         {reply, ok, #state{}} |
+                         {reply, {ok, term()}, #state{}} |
+                         {reply, {error, term()}, #state{}} |
+                         {reply, invalid_call, #state{}}.
 handle_call({set_api_key, ApiKey}, _From, State) ->
     error_logger:info_msg("set_api_key - ~p~n", [ApiKey]),
     {reply, ok, State#state{api_key = ApiKey}};
 handle_call({set_http_options, Options}, _From, State) ->
     error_logger:info_msg("set_http_options - ~p~n", [Options]),
     {reply, ok, State#state{http_opts = Options}};
+handle_call(get_http_options, _From, #state{http_opts = Options} = State) ->
+    error_logger:info_msg("get_http_options - ~p~n", [Options]),
+    {reply, Options, State};
 handle_call({call_api, Args}, _From,
             #state{api_key = ApiKey, http_opts = HTTPOptions} = State) ->
     Input     = maps:get(<<"input">>, Args, <<>>),
@@ -95,12 +115,18 @@ handle_call({call_api, Args}, _From,
 handle_call(_Call, _From, State) ->
     {reply, invalid_call, State}.
 
+%% @private
+-spec handle_cast(term(), #state{}) -> {noreply, #state{}}.
 handle_cast(_Cast, State) ->
     {noreply, State}.
 
+%% @private
+-spec handle_info(term(), #state{}) -> {noreply, #state{}}.
 handle_info(_Info, State) ->
     {noreply, State}.
 
+%% @private
+-spec code_change(term(), #state{}, term()) -> {ok, #state{}}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -119,7 +145,7 @@ run(ApiKey, InputType, Uri, Body, Options) ->
 
 http_request(Uri, Headers, Method, Body, Options) ->
     case hackney:request(Method, Uri, Headers, Body, Options) of
-        {ok, 200, _RespHeaders, ClientRef} ->
+        {ok, 200, RespHeaders, ClientRef} ->
             handle_response(ClientRef);
         {ok, 201, _RespHeaders, ClientRef} ->
             handle_response(ClientRef);
@@ -164,7 +190,7 @@ get_request_headers(ApiKey, InputType) ->
 
 handle_response(ClientRef) ->
     {ok, Body} = hackney:body(ClientRef),
-    Map = jiffy:decode(Body, [return_maps]),
+    Map        = jiffy:decode(Body, [return_maps]),
     case maps:is_key(<<"error">>, Map) of
         true ->
             {error, maps:get(<<"message">>, maps:get(<<"error">>, Map))};
