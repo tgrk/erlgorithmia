@@ -1,7 +1,7 @@
 %%%----------------------------------------------------------------------------
 %%% @author Martin Wiso <martin@wiso.cz>
 %%% @doc
-%%% Algorithmia API Erlang client - API tests
+%%% Algorithmia API Erlang client - API tests with keys
 %%% @end
 %%%----------------------------------------------------------------------------
 -module(eac_tests).
@@ -21,33 +21,27 @@ eac_server_test_() ->
      end,
      [
        {"Demo Hello Alg", fun test_hello_alg/0}
-     , {"Build URI",      fun test_build_uri/0}
-     , {"Query params",   fun test_query_params/0}
-     , {"Content types",  fun test_content_types/0}
+     %% , {"Build URI",      fun test_build_uri/0}
+     %% , {"Query params",   fun test_query_params/0}
+     %% , {"Content types",  fun test_content_types/0}
+     %% , {"HTTP options",   fun test_http_options/0}
      ]
     }.
 
 %%%=============================================================================
 test_hello_alg() ->
-    Creds = read_keys(),
+    ok = meck:new(hackney, [unstick, passthrough]),
+    try
+        ok = mock_request(<<"demo/Hello/0.1.1">>, valid),
 
-    ok = eac:set_api_key(maps:get(<<"api_key">>, Creds)),
+        {ok, Map} = eac:algo(<<"demo/Hello">>, <<"0.1.1">>, <<"HAL 9000">>, text),
+        ?assertEqual(<<"Hello HAL 9000">>, maps:get(<<"result">>, Map)),
+        ?assertEqual(<<"text">>, maps:get(<<"content_type">>,
+                                          maps:get(<<"metadata">>, Map)))
 
-    {ok, Map1} = eac:algo(<<"demo/Hello/0.1.1">>, <<"HAL 9000">>, text),
-    ?assertEqual(<<"Hello HAL 9000">>, maps:get(<<"result">>, Map1)),
-    ?assertEqual(<<"text">>,
-                 maps:get(<<"content_type">>, maps:get(<<"metadata">>, Map1))),
-
-    {ok, Map2} = eac:algo(<<"demo/Hello">>, <<"0.1.1">>, <<"HAL 9000">>, text),
-    ?assertEqual(<<"Hello HAL 9000">>, maps:get(<<"result">>, Map2)),
-    ?assertEqual(<<"text">>,
-                 maps:get(<<"content_type">>, maps:get(<<"metadata">>, Map2))),
-
-    {error, Reason} = eac:algo(<<"demo/Hello/0.1.1">>, <<"HAL 9000">>, json),
-    ?assertEqual(<<"Failed to parse input, input did not parse as valid json">>,
-                 Reason),
-
-    ok.
+    after
+        ok = meck:unload(hackney)
+    end.
 
 test_build_uri() ->
     ?assertEqual(<<"https://api.algorithmia.com/v1/algo/foo?stdout=true">>,
@@ -80,7 +74,41 @@ test_content_types() ->
                  eac_server:get_content_type(binary)),
     ok.
 
+test_http_options() ->
+    Options = [{pool,            default},
+               {follow_redirect, boolean}],
+
+    ?assertEqual([hd(Options)], eac:get_http_options()),
+
+    ?assertEqual(ok, eac:set_http_options(Options)),
+    ?assertEqual(Options, eac:get_http_options()),
+    ok.
+
 %%%=============================================================================
-read_keys() ->
-    {ok, [Creds]} = file:consult("api_key.txt"),
-    Creds.
+mock_request(UriPath, ResponseType) ->
+    meck:expect(hackney, request,
+                fun(Method, Uri, _Headers, _Body, Options) ->
+                        ?assertEqual(post, Method),
+                        ?assertEqual(eac_server:build_uri(UriPath, #{}), Uri),
+                        ?assertEqual([{pool, default}], Options),
+                        {ok, 200, [], connection1}
+                end),
+    meck:expect(hackney, body,
+                fun(connection1) ->
+                        {ok, jiffy:encode(get_response(ResponseType))}
+                end),
+    meck:expect(hackney, close, fun(connection2) -> ok end).
+
+
+
+get_response(error) ->
+    #{<<"error">> =>
+          #{<<"message">> =>
+                <<"Failed to parse input, input did not parse as valid json">>}
+     };
+get_response(valid) ->
+    #{<<"metadata">> =>
+          #{<<"content_type">> => <<"text">>,
+            <<"duration">> => 2.37616e-4},
+      <<"result">> => <<"Hello HAL 9000">>
+     }.
