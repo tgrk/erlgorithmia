@@ -20,21 +20,53 @@ eac_server_test_() ->
              eac:stop()
      end,
      [
-       {"Demo Hello Alg", fun test_hello_alg/0}
-     %% , {"Build URI",      fun test_build_uri/0}
-     %% , {"Query params",   fun test_query_params/0}
-     %% , {"Content types",  fun test_content_types/0}
-     %% , {"HTTP options",   fun test_http_options/0}
+       {"Demo Hello Alg default args",  fun test_hello_alg_default_args/0}
+     , {"Demo Hello Alg standard args", fun test_hello_alg_standard_args/0}
+     , {"Demo Hello Alg full args",     fun test_hello_alg_full_args/0}
+     , {"Build URI",                    fun test_build_uri/0}
+     , {"Query params",                 fun test_query_params/0}
+     , {"Content types",                fun test_content_types/0}
+     , {"HTTP options",                 fun test_http_options/0}
      ]
     }.
 
 %%%=============================================================================
-test_hello_alg() ->
+test_hello_alg_default_args() ->
     ok = meck:new(hackney, [unstick, passthrough]),
     try
         ok = mock_request(<<"demo/Hello/0.1.1">>, valid),
 
         {ok, Map} = eac:algo(<<"demo/Hello">>, <<"0.1.1">>, <<"HAL 9000">>, text),
+        ?assertEqual(<<"Hello HAL 9000">>, maps:get(<<"result">>, Map)),
+        ?assertEqual(<<"text">>, maps:get(<<"content_type">>,
+                                          maps:get(<<"metadata">>, Map)))
+
+    after
+        ok = meck:unload(hackney)
+    end.
+
+test_hello_alg_standard_args() ->
+    ok = meck:new(hackney, [unstick, passthrough]),
+    try
+        ok = mock_request(<<"demo/Hello/0.1.1">>, valid),
+
+        {ok, Map} = eac:algo(<<"demo/Hello/0.1.1">>, <<"HAL 9000">>),
+        ?assertEqual(<<"Hello HAL 9000">>, maps:get(<<"result">>, Map)),
+        ?assertEqual(<<"text">>, maps:get(<<"content_type">>,
+                                          maps:get(<<"metadata">>, Map)))
+
+    after
+        ok = meck:unload(hackney)
+    end.
+
+test_hello_alg_full_args() ->
+    ok = meck:new(hackney, [unstick, passthrough]),
+    try
+        Options = #{<<"timeout">> => 60},
+        ok = mock_request(<<"demo/Hello/0.1.1">>, valid, Options),
+
+        {ok, Map} = eac:algo(<<"demo/Hello">>, <<"0.1.1">>, <<"HAL 9000">>,
+                             text, Options),
         ?assertEqual(<<"Hello HAL 9000">>, maps:get(<<"result">>, Map)),
         ?assertEqual(<<"text">>, maps:get(<<"content_type">>,
                                           maps:get(<<"metadata">>, Map)))
@@ -86,11 +118,14 @@ test_http_options() ->
 
 %%%=============================================================================
 mock_request(UriPath, ResponseType) ->
+    mock_request(UriPath, ResponseType, #{}).
+
+mock_request(UriPath, ResponseType, Options) ->
     meck:expect(hackney, request,
-                fun(Method, Uri, _Headers, _Body, Options) ->
+                fun(Method, Uri, _Headers, _Body, HTTPOptions) ->
                         ?assertEqual(post, Method),
-                        ?assertEqual(eac_server:build_uri(UriPath, #{}), Uri),
-                        ?assertEqual([{pool, default}], Options),
+                        ?assertEqual(eac_server:build_uri(UriPath, Options), Uri),
+                        ?assertEqual([{pool, default}], HTTPOptions),
                         {ok, 200, [], connection1}
                 end),
     meck:expect(hackney, body,
