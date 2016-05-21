@@ -199,8 +199,9 @@ handle_response(ClientRef) ->
     end.
 
 build_qs(Args) ->
-    QS = maps:fold(fun (K, V, Acc) ->
-                           <<Acc/binary, K/binary, $=, (to_bin(V))/binary, $&>>
+    QS = maps:fold(
+           fun (K, V, Acc) ->
+                   <<Acc/binary, K/binary, $=, (to_bin(V))/binary, $&>>
                    end, <<>>, Args),
     binary:part(QS, {0, byte_size(QS) - 1}).
 
@@ -225,6 +226,8 @@ sanitize_query_param(K, V) ->
 
 to_bin(L) when is_list(L) ->
     ?l2b(L);
+to_bin(N) when is_integer(N) ->
+    ?i2b(N);
 to_bin(A) when is_atom(A) ->
     ?a2b(A);
 to_bin(B) ->
