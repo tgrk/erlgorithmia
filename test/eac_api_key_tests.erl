@@ -20,7 +20,7 @@ eac_server_api_key_test_() ->
              eac:stop()
      end,
      [
-       {"Demo Hello Alg", fun test_hello_alg/0}
+       {"Demo Hello Alg", {timeout, 60, fun test_hello_alg/0}}
      ]
     }.
 
